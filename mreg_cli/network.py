@@ -5,6 +5,7 @@ from .cli import Flag, cli
 from .history import history
 from .log import cli_info, cli_warning, cli_error
 from .util import (
+    convert_wildcard_to_regex,
     delete,
     get,
     get_list,
@@ -201,6 +202,84 @@ network.add_command(
              metavar='NETWORK'),
     ]
 )
+
+
+########################################
+# Implementation of sub command 'find' #
+########################################
+
+def find(args):
+    """List networks maching search criteria
+    """
+
+    def _add_param(param, value):
+        #if '*' not in value:
+        #    value = f'*{value}*'
+
+        #param, value = convert_wildcard_to_regex(param, value)
+        params[param] = value
+
+    if not any([args.category,args.vlan,args.description]):
+        cli_warning('Need at least one search critera')
+
+    params = {
+        "page_size": 1,
+    }
+
+    for param in ('category', 'vlan', 'description'):
+        value = getattr(args, param)
+        if value:
+            _add_param(param, value)
+
+    path = "/api/v1/networks/"
+    ret = get(path, params=params).json()
+    #print(ret)
+
+    if ret['count'] == 0:
+        cli_warning('No networks found.')
+    elif ret['count'] > 500:
+        cli_warning(f'Too many hits, {ret["count"]}, more than limit of 500. Refine search.')
+
+    del(params["page_size"])
+    ret = get_list(path, params=params)
+
+    max_network = max_category = 20
+    max_vlan = 10
+    for i in ret:
+        max_network = max(max_network, len(i['network']))
+        max_vlan = max(max_vlan, len(str(i['vlan'])))
+        max_category = max(max_category, len(i['category']))
+
+
+    def _print(network, vlan, category, description):
+        print("{0:<{1}} {2:<{3}} {4:<{5}} {6}".format(network, max_network, vlan, max_vlan, category, max_category, description))
+
+    _print('Network', 'Vlan', 'Category', 'Description')
+    for i in ret:
+        _print(i['network'], i['vlan'], i['category'], i['description'])
+
+
+network.add_command(
+    prog='find',
+    description='List networks matching search criteria',
+    short_desc='List networks matching search criteria',
+    callback=find,
+    flags=[
+        Flag('-category',
+             description='category or part of category',
+             short_desc='category or part of category',
+             metavar='CATEGORY'),
+        Flag('-vlan',
+             description='vlan',
+             short_desc='vlan',
+             metavar='VLAN'),
+        Flag('-description',
+             description='description or part of description',
+             short_desc='description or part of description',
+             metavar='DESCRIPTION'),
+    ]
+)
+
 
 
 #########################################################
